@@ -1,74 +1,41 @@
-name: Build and Release
+name: Build APK/So
 
 on:
   push:
-    tags:
-      - 'v*'   # akan jalan ketika push tag seperti v1.0, v2.1, dll
-  workflow_dispatch:  # juga bisa dijalankan manual dari tab Actions
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      release_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up JDK 17
+    - uses: actions/checkout@v4
+    
+    - name: Setup JDK
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-
-    - name: Set up Android NDK
+    
+    - name: Setup NDK
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: r26d
-
-    - name: Make compile.sh executable
-      run: chmod +x compile.sh
-
-    - name: Build with NDK
+    
+    - name: Fix compile.sh
       run: |
-        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125
-        ./compile.sh
-
-    - name: List build output (for debugging)
-      run: |
-        echo "Listing libs folder:"
-        ls -la libs/ || echo "libs folder not found"
-        echo "Listing obj folder:"
-        ls -la obj/ || echo "obj folder not found"
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        echo '#!/bin/bash' > compile.sh
+        echo 'ndk-build -C .' >> compile.sh
+        chmod +x compile.sh
+    
+    - name: Build
+      run: ./compile.sh
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: ${{ github.ref_name }}
-        release_name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-
-    - name: Upload build artifacts to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./libs/arm64-v8a/libMLbb-external.so
-        asset_name: libMLbb-external-${{ github.ref_name }}.so
-        asset_content_type: application/octet-stream
-
-    # Upload juga jika ada file lain yang dihasilkan (misal dari folder obj)
-    - name: Upload other artifacts (optional)
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./obj/local/arm64-v8a/libMLbb-external.so
-        asset_name: libMLbb-external-${{ github.ref_name }}-debug.so
-        asset_content_type: application/octet-stream
+        name: build-output
+        path: |
+          libs/
+          obj/local/
+          *.so
